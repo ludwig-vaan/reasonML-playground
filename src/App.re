@@ -35,6 +35,7 @@ Api
  */
 module Api = {
   open Json.Decode;
+  module Promise = Js.Promise;
 
   let decodeResults =
     field(
@@ -55,7 +56,7 @@ module Api = {
      * This is similar to `open Json.Decode`, it allows the Promise functions
      * to be available within the parentheses
      */
-    Js.Promise.(
+    Promise.(
       Fetch.fetch("https://api.github.com/search/repositories?q=" ++ query)
       |> then_(Fetch.Response.json)
       |> then_(json => decodeResults(json) |> resolve)
