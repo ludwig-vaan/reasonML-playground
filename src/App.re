@@ -4,19 +4,35 @@ type repository = {
   href: string,
 };
 
+/* Record
+   Les records sont comme des objets JavaScript mais sont
+       plus léger
+       immuable par défaut
+       fixes au niveau des noms de champ et des types
+       très rapide
+       typés de façon un peu plus rigide */
 type state = {
   input: string,
-  loading: bool,
+  isLoading: bool,
   results: list(repository),
 };
+
+/* Variant!
+   La majorité des structures de données dans la plupart des langages concernent «ceci et cela». Un variant nous permet d'exprimer «ceci ou cela». */
 
 type action =
   | UpdateInput(string)
   | UpdateResults(list(repository))
   | Search;
-
+/*
+ il y a deux types de composants ReasonReact.statelessComponent("App") et ReasonReact.reducerComponent("App")
+ declarer le composant apres les actions et le state
+ */
 let component = ReasonReact.reducerComponent("App");
 
+/**
+Api
+ */
 module Api = {
   open Json.Decode;
   module Promise = Js.Promise;
@@ -42,9 +58,9 @@ module Api = {
      */
     Promise.(
       Fetch.fetch("https://api.github.com/search/repositories?q=" ++ query)
-      |> Promise.then_(Fetch.Response.json)
-      |> Promise.then_(json => decodeResults(json) |> resolve)
-      |> Promise.then_(results =>
+      |> then_(Fetch.Response.json)
+      |> then_(json => decodeResults(json) |> resolve)
+      |> then_(results =>
            results
            |> List.filter(optionalItem =>
                 switch (optionalItem) {
@@ -52,6 +68,7 @@ module Api = {
                 | None => false
                 }
               )
+           /* Turn our items out of option types into a regular record */
            |> List.map(item =>
                 switch (item) {
                 | Some(item) => item
@@ -62,30 +79,31 @@ module Api = {
     );
 };
 
-module Styles = {
-  open Css;
-
-  let list = style([
-    display(`flex),
-    flexWrap(`wrap),
-  ])
-}
-
+/*
+ Pour avoir un stateful component :
+ 1 - il faut rajouter un initialState sous forme d'une function
+ qui retourne le record avec les valeurs par default
+ 2 - il faut rajouter le reducer, un peu comme redux en utilisant le pattern-matching
+ 3 - modification du render, remplacer _self par self nb : c'est comme le this
+ */
 let make = _children => {
   ...component,
-  initialState: () => {input: "", loading: false, results: []},
+  initialState: () => {input: "", isLoading: false, results: []},
   reducer: (action, state) =>
     switch (action) {
-    | UpdateInput(input) => ReasonReact.Update({...state, input})
+    | UpdateInput(newInput) =>
+      ReasonReact.Update({...state, input: newInput})
     | UpdateResults(results) =>
-      ReasonReact.Update({...state, loading: false, results})
+      ReasonReact.Update({...state, isLoading: false, results})
     | Search =>
       ReasonReact.UpdateWithSideEffects(
-        {...state, loading: true},
+        {...state, isLoading: true},
         (
           self => {
             let value = self.state.input;
-            let _promise =
+            /* This function needs to return a "unit" type, wo we'll insert it here */
+            Js.log("this is reason, result : " ++ value);
+            let _ =
               Api.getResults(value)
               |> Js.Promise.then_(results => {
                    self.send(UpdateResults(results));
@@ -112,6 +130,7 @@ let make = _children => {
           value={self.state.input}
           onChange={
             ev => {
+              /** event->ReactEvent.Form.target##value */
               let value = ReactEvent.Form.target(ev)##value;
               self.send(UpdateInput(value));
             }
@@ -123,13 +142,16 @@ let make = _children => {
       </form>
       <div>
         {
-          self.state.loading ?
+          self.state.isLoading ?
             ReasonReact.string("Loading...") :
             self.state.results
+            /* Convert to list to an array for ReasonReact's type bindings */
             |> Array.of_list
+            /* Map each array item to a <Card /> component */
             |> Array.map(({name, href, description}) =>
-                 <Card key={name} name href description />
+                 <Card key=name name href description />
                )
+            /* Transform the array into a valid React node, similar to ReasonReact.string */
             |> ReasonReact.array
         }
       </div>
